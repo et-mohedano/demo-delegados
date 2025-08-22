@@ -23,6 +23,7 @@ const STATE = {
   currentUser: null,
   assignedFeature: null,
   reports: [],
+  mapFirstShown: false,
 };
 
 const THEMES = {
@@ -269,6 +270,18 @@ setTimeout(()=>{
     icon: makeTempIcon(),
     zIndexOffset: 1000
   }).addTo(STATE.map);
+
+  if (target === "viewMapa") {
+  setTimeout(()=>{
+    STATE.map.invalidateSize();
+    if (!STATE.mapFirstShown && STATE.layers.colonias) {
+      const col = byId('filterColonia').value;
+      if (col) focusColonia(col);
+      else STATE.map.fitBounds(STATE.layers.colonias.getBounds());
+      STATE.mapFirstShown = true;   // 👈 solo una vez
+    }
+  }, 50);
+}
 
   openReportForm(latlng);
 });
