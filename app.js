@@ -79,6 +79,12 @@ function initMap(){
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19, attribution: '&copy; OpenStreetMap'
   }).addTo(STATE.map);
+
+  // 👇 panes para ordenar capas
+  const pColonias = STATE.map.createPane('coloniasPane'); pColonias.style.zIndex = 400;
+  const pHighlight = STATE.map.createPane('highlightPane'); pHighlight.style.zIndex = 410;
+  const pReports   = STATE.map.createPane('reportsPane');   pReports.style.zIndex   = 620;
+
   STATE.layers.reports.addTo(STATE.map);
 }
 
@@ -324,8 +330,19 @@ function closeReportForm(){
 // Marcadores de reportes
 function addReportMarker(r){
   const color = THEMES[r.tema]?.color || "#111827";
-  const marker = L.circleMarker([r.coords.lat, r.coords.lng], {radius:7, color, fillColor:color, fillOpacity:.85})
-    .bindPopup(renderReportPopupHTML(r));
+  const marker = L.circleMarker([r.coords.lat, r.coords.lng], {
+  pane: 'reportsPane',   // 👈 arriba del highlight
+  radius:7,
+  color,
+  fillColor: color,
+  fillOpacity:.85
+}).bindPopup(renderReportPopupHTML(r));
+marker.on('click', (e)=>{
+  if (e.originalEvent) {
+    e.originalEvent.preventDefault();
+    e.originalEvent.stopPropagation();
+  }
+});
   marker._reportId = r.id;
   STATE.layers.reports.addLayer(marker);
 }
