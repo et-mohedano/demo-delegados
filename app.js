@@ -378,7 +378,10 @@ function openReportForm(latlng){
   byId('lat').value = latlng.lat.toFixed(6);
   byId('lng').value = latlng.lng.toFixed(6);
   byId('reportForm').style.display = 'block';
-  document.querySelector('[data-target="viewMapa"]').click(); // cambiar a Mapa
+  const mapIsVisible = byId('viewMapa').style.display === 'block';
+  if (!mapIsVisible) {
+    document.querySelector('[data-target="viewMapa"]').click();
+  }
 }
 function closeReportForm(){
   if(STATE.layers.tempMarker){ 
