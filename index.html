@@ -1,0 +1,172 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>POC · Módulo Delegados IMIP</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6.5.0/turf.min.js"></script>
+</head>
+<body>
+
+  <div class="header">
+    <div class="brand">
+      <div class="badge">IMIP</div>
+      <div>
+        <div style="font-weight:800">Módulo de Delegados · POC</div>
+        <small class="help">Pachuca de Soto · Prueba de concepto (no conecta a servidor)</small>
+      </div>
+    </div>
+    <div class="nav">
+      <button class="tab" data-target="viewDashboard">Dashboard</button>
+      <button class="tab" data-target="viewMapa">Mapa</button>
+    </div>
+    <div class="userbar">
+      <span id="userPill" class="user-pill">Visitante</span>
+    </div>
+  </div>
+
+  <div class="container">
+
+    <aside class="sidebar">
+      <h3>Filtros y acciones</h3>
+      <div class="form-row">
+        <label for="filterColonia">Filtrar por colonia</label>
+        <select id="filterColonia"></select>
+        <div class="switch">
+          <input type="checkbox" id="toggleMine">
+          <label for="toggleMine">Solo mi colonia asignada</label>
+        </div>
+        <div class="help">Tip: haz clic en el polígono para enfocarlo; haz clic en el mapa (dentro de tu colonia) para crear un reporte.</div>
+      </div>
+
+      <div class="panel">
+        <h3>Nuevo reporte</h3>
+        <div class="help">Haz clic en el mapa dentro de tu colonia para abrir el formulario.</div>
+        <div id="reportForm" style="display:none">
+          <div class="form-row">
+            <label>Coordenadas</label>
+            <div style="display:flex;gap:.5rem; flex-direction: column;">
+              <input id="lat" type="text" placeholder="lat" style="flex:1">
+              <input id="lng" type="text" placeholder="lng" style="flex:1">
+            </div>
+          </div>
+          <div class="form-row">
+            <label for="tema">Tema</label>
+            <select id="tema"></select>
+          </div>
+          <div class="form-row">
+            <label for="variable">Variable</label>
+            <select id="variable"></select>
+          </div>
+          <div class="form-row">
+            <label for="estadoVar">Estado</label>
+            <select id="estadoVar"></select>
+          </div>
+          <div class="form-row">
+            <label for="comentario">Comentario</label>
+            <textarea id="comentario" rows="3" placeholder="Describe qué pasa…"></textarea>
+          </div>
+          <div class="form-row">
+            <label for="fotos">Fotos (opcional)</label>
+            <input id="fotos" type="file" multiple accept="image/*">
+          </div>
+          <div class="actions">
+            <button id="saveReport" class="btn primary">Guardar</button>
+            <button id="cancelReport" class="btn secondary">Cancelar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3>Mis reportes recientes</h3>
+        <div id="reportList" class="report-list"></div>
+        <div class="actions">
+          <button id="exportCsv" class="btn ghost">Descargar CSV</button>
+        </div>
+      </div>
+    </aside>
+
+    <main>
+      <section id="viewDashboard" class="view" style="display:none">
+        <div id="welcomeBox" class="welcome" style="display:none"></div>
+        <div class="kpis">
+          <div class="card"><h4>Total de reportes</h4><div id="k_total" class="stat">0</div></div>
+          <div class="card"><h4>Informados</h4><div id="k_info" class="stat">0</div></div>
+          <div class="card"><h4>Atendidos</h4><div id="k_done" class="stat">0</div></div>
+          <div class="card"><h4>Temas distintos</h4><div id="k_topics" class="stat">0</div></div>
+        </div>
+
+        <div class="grid two" style="margin-top:.75rem">
+          <div class="card">
+            <h4>Distribución por tema</h4>
+            <canvas id="chartTema" height="140"></canvas>
+          </div>
+          <div class="card">
+            <h4>Guía rápida</h4>
+            <ol style="margin:0;padding-left:1.15rem">
+              <li>Inicia sesión como delegado (usuarios demo abajo).</li>
+              <li>Activa “Solo mi colonia” para enfocarte.</li>
+              <li>Haz clic dentro de tu colonia en el mapa para crear reportes.</li>
+              <li>Consulta tus métricas en este dashboard.</li>
+            </ol>
+            <div id="demoCreds" style="margin-top:.5rem"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="viewMapa" class="view" style="display:none">
+        <div class="map-wrap">
+          <div id="map"></div>
+          <div class="legend" id="legendBox"></div>
+        </div>
+        <div class="help" style="margin-top:.4rem">El color del polígono representa densidad de reportes por colonia (general). Los puntos están coloreados por tema.</div>
+      </section>
+    </main>
+
+  </div>
+
+  <footer>POC para IMIP Pachuca · Agosto 2025</footer>
+
+  <div class="toast"></div>
+
+  <!-- Login Modal -->
+  <div id="loginModal">
+    <div class="login-card">
+      <div class="login-left">
+        <h2 style="margin:.25rem 0">Acceso para Delegados</h2>
+        <p class="help">Ingresa con tu usuario y contraseña. En esta POC se validará el acceso de usuarios demo y se restringirá la captura a su colonia.</p>
+        <form id="loginForm" class="login-form">
+          <div class="form-row">
+            <label for="username">Usuario</label>
+            <input id="username" type="text" placeholder="e.g., ana">
+          </div>
+          <div class="form-row">
+            <label for="password">Contraseña</label>
+            <input id="password" type="password" placeholder="******">
+          </div>
+          <button class="btn primary" type="submit">Iniciar sesión</button>
+          <div id="demoCreds" style="margin-top:.5rem"></div>
+        </form>
+      </div>
+      <div class="login-right">
+        <h2>Bienvenid@</h2>
+        <p>Esta prueba de concepto muestra el flujo completo:</p>
+        <ul>
+          <li>Login de delegado con colonia asignada</li>
+          <li>Visor de colonias de Pachuca</li>
+          <li>Reportes georreferenciados por tema y variable</li>
+          <li>Estados: <strong>informado</strong> / <strong>atendido</strong></li>
+          <li>Dashboard de métricas por delegado</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
