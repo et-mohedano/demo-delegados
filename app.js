@@ -12,6 +12,7 @@ const STATE = {
     irregular: null,
     reports: L.layerGroup(),
     highlight: null,
+    tempMarker: null,
   },
   data: {
     colonias: null,
@@ -72,15 +73,30 @@ function toast(msg){
 }
 function byId(id){ return document.getElementById(id); }
 function fmtDate(ts){ return new Date(ts).toLocaleString(); }
+function makeTempIcon(){
+  const html = `<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+    <path d="M12 2c-3.3 0-6 2.5-6 5.7 0 3.9 4.9 9.7 5.6 10.5.2.2.6.2.8 0 .7-.8 5.6-6.6 5.6-10.5C18 4.5 15.3 2 12 2Z" fill="#2563eb" stroke="white" stroke-width="2"/>
+    <circle cx="12" cy="8.5" r="2.5" fill="white"/>
+  </svg>`;
+  return L.divIcon({ className:'temp-pin', html, iconSize:[24,24], iconAnchor:[12,24] });
+}
 
 // Map init
 function initMap(){
   STATE.map = L.map('map').setView([20.119, -98.734], 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19, attribution: '&copy; OpenStreetMap'
-  }).addTo(STATE.map);
 
-  // 👇 panes para ordenar capas
+  // Base layers
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19, attribution: '&copy; OpenStreetMap'
+  });
+  const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 19,
+    attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+  });
+  osm.addTo(STATE.map);
+  L.control.layers({ 'Mapa': osm, 'Satélite': esri }, null, { position:'topright', collapsed:true }).addTo(STATE.map);
+
+  // Panes para controlar el orden de capas
   const pColonias = STATE.map.createPane('coloniasPane'); pColonias.style.zIndex = 400;
   const pHighlight = STATE.map.createPane('highlightPane'); pHighlight.style.zIndex = 410;
   const pReports   = STATE.map.createPane('reportsPane');   pReports.style.zIndex   = 620;
@@ -197,6 +213,16 @@ function setupUI(){
     const target = t.dataset.target;
     document.querySelectorAll(".view").forEach(v=>v.style.display="none");
     document.getElementById(target).style.display = "block";
+    // Oculta sidebar en Dashboard, muéstralo en Mapa
+    const container = document.querySelector('.container');
+    const sidebar = document.querySelector('.sidebar');
+    if (target === "viewDashboard") {
+      sidebar.style.display = "none";
+      container.classList.add("no-sidebar");
+    } else {
+      sidebar.style.display = "";
+      container.classList.remove("no-sidebar");
+    }
 
     // FIX: Cuando la pestaña Mapa se hace visible, invalidar tamaño y centrar Pachuca
     if(target === "viewMapa"){
@@ -212,25 +238,40 @@ function setupUI(){
   }));
 
   // Por defecto Dashboard visible
-  document.querySelector('.tab[data-target="viewDashboard"]').classList.add('active');
-  byId('viewDashboard').style.display='block';
+  document.querySelector('.tab[data-target="viewMapa"]').classList.add('active');
+byId('viewMapa').style.display='block';
+setTimeout(()=>{
+  STATE.map.invalidateSize();
+  if(STATE.layers.colonias){
+    const col = byId('filterColonia').value;
+    if(col) focusColonia(col);
+    else STATE.map.fitBounds(STATE.layers.colonias.getBounds());
+  }
+}, 50);
 
   // Filtros
   byId('filterColonia').addEventListener('change', e=>{ focusColonia(e.target.value); });
-  byId('toggleMine').addEventListener('change', e=>{
-    if(e.target.checked && STATE.currentUser){
-      focusColonia(STATE.currentUser.colonia);
-      byId('filterColonia').value = STATE.currentUser.colonia;
-    }
-  });
+  
 
   // Click en mapa -> formulario de reporte (si es dentro de colonia asignada)
   STATE.map.on('click', (ev)=>{
-    if(!STATE.currentUser){ toast("Inicia sesión para reportar."); return; }
-    const latlng = ev.latlng;
-    if(!isInsideAssigned(latlng)){ toast("Solo puedes reportar dentro de tu colonia asignada."); return; }
-    openReportForm(latlng);
-  });
+  if(!STATE.currentUser){ toast("Inicia sesión para reportar."); return; }
+  const latlng = ev.latlng;
+  if(!isInsideAssigned(latlng)){ toast("Solo puedes reportar dentro de tu colonia asignada."); return; }
+
+  // Pin temporal antes de guardar (SVG nítido)
+  if (STATE.layers.tempMarker) {
+    STATE.map.removeLayer(STATE.layers.tempMarker);
+    STATE.layers.tempMarker = null;
+  }
+  STATE.layers.tempMarker = L.marker(latlng, {
+    pane:'reportsPane',
+    icon: makeTempIcon(),
+    zIndexOffset: 1000
+  }).addTo(STATE.map);
+
+  openReportForm(latlng);
+});
 
   // Catálogo tema/variable/estado
   const selTema = byId('tema');
@@ -291,6 +332,10 @@ function setupUI(){
         status: "informado", coords: {lat, lng}, fotos, ts: Date.now()
       };
       STATE.reports.push(report);
+      if(STATE.layers.tempMarker){ 
+        STATE.map.removeLayer(STATE.layers.tempMarker); 
+        STATE.layers.tempMarker = null; 
+      }
       saveReports(); addReportMarker(report); renderReportList(); refreshDashboard();
       toast("Reporte guardado."); closeReportForm();
     });
@@ -314,6 +359,16 @@ function setupUI(){
     a.href = url; a.download = "reportes.csv"; a.click();
     URL.revokeObjectURL(url);
   });
+  const btnLocate = byId('btnLocate');
+if (btnLocate) {
+  btnLocate.addEventListener('click', ()=>{
+    if(!STATE.currentUser){ toast("Inicia sesión para continuar."); return; }
+    byId('filterColonia').value = STATE.currentUser.colonia;
+    focusColonia(STATE.currentUser.colonia);
+    // Asegura que estás viendo el mapa
+    document.querySelector('[data-target="viewMapa"]').click();
+  });
+}
 }
 
 // Formulario de reporte
@@ -324,6 +379,10 @@ function openReportForm(latlng){
   document.querySelector('[data-target="viewMapa"]').click(); // cambiar a Mapa
 }
 function closeReportForm(){
+  if(STATE.layers.tempMarker){ 
+  STATE.map.removeLayer(STATE.layers.tempMarker); 
+  STATE.layers.tempMarker = null; 
+}
   byId('reportForm').style.display = 'none';
   byId('tema').value = ""; byId('variable').value=""; byId('estadoVar').value="";
   byId('comentario').value = ""; byId('fotos').value="";
@@ -432,6 +491,27 @@ function setupLogin(){
     // Find assigned feature
     const idx = STATE.data.coloniasIndexByName.get(user.colonia);
     STATE.assignedFeature = STATE.data.colonias.features[idx];
+    if (STATE.layers.colonias) { STATE.map.removeLayer(STATE.layers.colonias); }
+STATE.layers.colonias = L.geoJSON(STATE.assignedFeature, {
+  pane:'coloniasPane',
+  style:{ color:"#9ca3af", weight:1, fillColor:"#c7d2fe", fillOpacity:0.25 },
+  onEachFeature:(feature, layer)=>{
+    const colName = feature.properties?.NOMBRE || "Colonia";
+    layer.bindTooltip(colName, {sticky:true});
+  }
+}).addTo(STATE.map);
+
+// Bloquea el select a esa única colonia
+const sel = byId('filterColonia');
+if (sel){
+  sel.innerHTML = "";
+  const opt = document.createElement('option'); 
+  opt.value = STATE.currentUser.colonia; 
+  opt.textContent = STATE.currentUser.colonia;
+  sel.appendChild(opt);
+  sel.value = STATE.currentUser.colonia;
+  sel.disabled = true; // 👈 no puede cambiarla
+}
     // Greeting
     byId('loginModal').style.display='none';
     byId('welcomeBox').innerHTML = `Bienvenido/a, <strong>${user.nombre}</strong>. Tu colonia asignada es <strong>${user.colonia}</strong>. 
@@ -439,7 +519,6 @@ function setupLogin(){
     byId('welcomeBox').style.display='block';
     byId('userPill').textContent = `${user.nombre} · ${user.colonia}`;
     // Default to "Solo mi colonia"
-    byId('toggleMine').checked = true;
     byId('filterColonia').value = user.colonia;
     focusColonia(user.colonia);
     // Asegurar render correcto si la pestaña Mapa está abierta
