@@ -227,15 +227,16 @@ function setupUI(){
 
     // FIX: Cuando la pestaña Mapa se hace visible, invalidar tamaño y centrar Pachuca
     if(target === "viewMapa"){
-      setTimeout(()=>{
-        STATE.map.invalidateSize();
-        if(STATE.layers.colonias){
-          const col = byId('filterColonia').value;
-          if(col) focusColonia(col);
-          else STATE.map.fitBounds(STATE.layers.colonias.getBounds());
-        }
-      }, 50);
+  setTimeout(()=>{
+    STATE.map.invalidateSize();
+    if (!STATE.mapFirstShown && STATE.layers.colonias) {
+      const col = byId('filterColonia').value;
+      if(col) focusColonia(col);
+      else STATE.map.fitBounds(STATE.layers.colonias.getBounds());
+      STATE.mapFirstShown = true;   // solo una vez
     }
+  }, 50);
+}
   }));
 
   // Por defecto Dashboard visible
@@ -255,7 +256,7 @@ setTimeout(()=>{
   
 
   // Click en mapa -> formulario de reporte (si es dentro de colonia asignada)
-  STATE.map.on('click', (ev)=>{
+ STATE.map.on('click', (ev)=>{
   if(!STATE.currentUser){ toast("Inicia sesión para reportar."); return; }
   const latlng = ev.latlng;
   if(!isInsideAssigned(latlng)){ toast("Solo puedes reportar dentro de tu colonia asignada."); return; }
@@ -270,18 +271,6 @@ setTimeout(()=>{
     icon: makeTempIcon(),
     zIndexOffset: 1000
   }).addTo(STATE.map);
-
-  if (target === "viewMapa") {
-  setTimeout(()=>{
-    STATE.map.invalidateSize();
-    if (!STATE.mapFirstShown && STATE.layers.colonias) {
-      const col = byId('filterColonia').value;
-      if (col) focusColonia(col);
-      else STATE.map.fitBounds(STATE.layers.colonias.getBounds());
-      STATE.mapFirstShown = true;   // 👈 solo una vez
-    }
-  }, 50);
-}
 
   openReportForm(latlng);
 });
