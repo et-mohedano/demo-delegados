@@ -108,8 +108,9 @@ async function loadGeo(){
   // Render layers (todas con estilo uniforme)
   const styleBase = { color:"#9ca3af", weight:1, fillColor:"#c7d2fe", fillOpacity:0.25 };
   STATE.layers.colonias = L.geoJSON(STATE.data.colonias, {
-    style: styleBase,
-    onEachFeature: (feature, layer) => {
+    pane: 'coloniasPane',
+  style: { color:"#9ca3af", weight:1, fillColor:"#c7d2fe", fillOpacity:0.25 },
+  onEachFeature: (feature, layer) => {
       const colName = feature.properties?.NOMBRE || "Colonia";
       layer.bindTooltip(colName, {sticky:true});
       layer.on('click', () => {
@@ -166,7 +167,8 @@ function focusColonia(name){
   const feature = STATE.data.colonias.features[idx];
   // Capa de realce (relleno/contorno distinto)
   STATE.layers.highlight = L.geoJSON(feature, {
-    style:{ color:"#1f2937", weight:3, fillColor:"#3b82f6", fillOpacity:.18 }
+    style:{ color:"#1f2937", weight:3, fillColor:"#3b82f6", fillOpacity:.18 },
+    interactive: false 
   }).addTo(STATE.map);
   STATE.layers.highlight._isHighlight = true;
   STATE.map.fitBounds(STATE.layers.highlight.getBounds(), {maxZoom:16});
@@ -330,19 +332,8 @@ function closeReportForm(){
 // Marcadores de reportes
 function addReportMarker(r){
   const color = THEMES[r.tema]?.color || "#111827";
-  const marker = L.circleMarker([r.coords.lat, r.coords.lng], {
-  pane: 'reportsPane',   // 👈 arriba del highlight
-  radius:7,
-  color,
-  fillColor: color,
-  fillOpacity:.85
-}).bindPopup(renderReportPopupHTML(r));
-marker.on('click', (e)=>{
-  if (e.originalEvent) {
-    e.originalEvent.preventDefault();
-    e.originalEvent.stopPropagation();
-  }
-});
+  const marker = L.circleMarker([r.coords.lat, r.coords.lng], {radius:7, color, fillColor:color, fillOpacity:.85})
+    .bindPopup(renderReportPopupHTML(r));
   marker._reportId = r.id;
   STATE.layers.reports.addLayer(marker);
 }
